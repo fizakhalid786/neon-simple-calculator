@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neon Calculator</title>
+<style>
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  --bg: #eef0ff; --card: #ffffff; --screen: #f3f4ff; --text: #1e1b4b; --muted: #6b7280;
+  --key: #e7e9ff; --key-hover: #d5d9ff; --accent: #7c3aed; --accent-2: #db2777;
+  --danger: #ef4444; --ok: #059669; --shadow: 0 20px 50px rgba(76,29,149,.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f0b1f; --card: #1a1533; --screen: #120e26; --text: #f5f3ff; --muted: #a5a0c8;
+    --key: #2a2350; --key-hover: #373068; --accent: #8b5cf6; --accent-2: #f472b6;
+    --danger: #f87171; --ok: #34d399; --shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f0b1f; --card: #1a1533; --screen: #120e26; --text: #f5f3ff; --muted: #a5a0c8;
+  --key: #2a2350; --key-hover: #373068; --accent: #8b5cf6; --accent-2: #f472b6;
+  --danger: #f87171; --ok: #34d399; --shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  background: var(--bg); color: var(--text);
+  display: flex; justify-content: center; align-items: center; padding: 16px;
+}
+.calc { width: 100%; max-width: 340px; background: var(--card); border-radius: 24px; padding: 20px; box-shadow: var(--shadow); }
+.title { text-align: center; margin: 0 0 14px; font-size: 18px; letter-spacing: 2px; text-transform: uppercase;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.screen { background: var(--screen); border-radius: 16px; padding: 12px 16px; margin-bottom: 16px; text-align: right; min-height: 96px;
+  display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+.expr { color: var(--muted); font-size: 14px; min-height: 20px; }
+.value { font-size: 40px; font-weight: 600; white-space: nowrap; overflow-x: auto; scrollbar-width: none; }
+.keys { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+button { height: 56px; border: 0; border-radius: 14px; background: var(--key); color: var(--text); font-size: 20px; font-weight: 500;
+  cursor: pointer; transition: transform .08s, background .15s; font-family: inherit; }
+button:hover { background: var(--key-hover); }
+button:active { transform: scale(.94); }
+button.op { background: var(--accent); color: #fff; }
+button.op:hover { filter: brightness(1.12); }
+button.op.active { background: #fff; color: var(--accent); outline: 2px solid var(--accent); }
+button.fn { color: var(--accent); font-weight: 600; }
+button.clear { background: var(--danger); color: #fff; }
+button.eq { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #fff; }
+.hint { text-align: center; color: var(--muted); font-size: 12px; margin: 14px 0 0; }
+</style>
+</head>
+<body>
+<div class="calc">
+  <h1 class="title">Neon Calc</h1>
+  <div class="screen">
+    <div class="expr" id="expr"></div>
+    <div class="value" id="value">0</div>
+  </div>
+  <div class="keys" id="keys">
+    <button class="clear" data-a="clear">C</button>
+    <button class="fn" data-a="del">DEL</button>
+    <button class="fn" data-a="percent">%</button>
+    <button class="op" data-a="op" data-v="/">÷</button>
+
+    <button data-a="num" data-v="7">7</button>
+    <button data-a="num" data-v="8">8</button>
+    <button data-a="num" data-v="9">9</button>
+    <button class="op" data-a="op" data-v="*">×</button>
+
+    <button data-a="num" data-v="4">4</button>
+    <button data-a="num" data-v="5">5</button>
+    <button data-a="num" data-v="6">6</button>
+    <button class="op" data-a="op" data-v="-">−</button>
+
+    <button data-a="num" data-v="1">1</button>
+    <button data-a="num" data-v="2">2</button>
+    <button data-a="num" data-v="3">3</button>
+    <button class="op" data-a="op" data-v="+">+</button>
+
+    <button data-a="num" data-v="0">0</button>
+    <button data-a="dot">.</button>
+    <button class="fn" data-a="neg">±</button>
+    <button class="eq" data-a="eq">=</button>
+  </div>
+  <p class="hint">Keyboard bhi chalta hai: 0-9 + − × ÷ Enter Backspace Esc</p>
+</div>
+
+<script>
+const valueEl = document.getElementById("value");
+const exprEl = document.getElementById("expr");
+const SYM = { "+": "+", "-": "−", "*": "×", "/": "÷" };
+let cur = "0", prev = null, op = null, fresh = true;
+
+const fmt = n => (typeof n === "number" && isFinite(n)) ? String(parseFloat(n.toPrecision(12))) : "Error";
+
+function compute(a, b, o) {
+  switch (o) {
+    case "+": return a + b;
+    case "-": return a - b;
+    case "*": return a * b;
+    case "/": return b === 0 ? NaN : a / b;
+  }
+  return b;
+}
+
+function render() {
+  valueEl.textContent = cur;
+  document.querySelectorAll("button.op").forEach(b =>
+    b.classList.toggle("active", op !== null && fresh && b.dataset.v === op));
+}
+
+function num(d) {
+  if (cur === "Error" || fresh) { cur = d; fresh = false; }
+  else if (cur.replace(/[-.]/g, "").length < 14) cur = cur === "0" ? d : cur + d;
+  render();
+}
+function dot() {
+  if (cur === "Error" || fresh) { cur = "0."; fresh = false; }
+  else if (!cur.includes(".")) cur += ".";
+  render();
+}
+function setOp(o) {
+  if (cur === "Error") return;
+  if (op !== null && !fresh) {
+    cur = fmt(compute(prev, Number(cur), op));
+    if (cur === "Error") { reset(true); return; }
+  }
+  prev = Number(cur); op = o; fresh = true;
+  exprEl.textContent = fmt(prev) + " " + SYM[o];
+  render();
+}
+function equals() {
+  if (op === null || cur === "Error") return;
+  const b = Number(cur);
+  const r = fmt(compute(prev, b, op));
+  exprEl.textContent = fmt(prev) + " " + SYM[op] + " " + fmt(b) + " =";
+  cur = r; prev = null; op = null; fresh = true;
+  render();
+}
+function percent() {
+  if (cur === "Error") return;
+  cur = fmt(Number(cur) / 100); fresh = true; render();
+}
+function negate() {
+  if (cur === "Error" || cur === "0") return;
+  cur = cur.startsWith("-") ? cur.slice(1) : "-" + cur; render();
+}
+function del() {
+  if (fresh || cur === "Error") return;
+  cur = (cur.length > 1 && !(cur.length === 2 && cur[0] === "-")) ? cur.slice(0, -1) : "0";
+  render();
+}
+function reset(err) {
+  cur = err ? "Error" : "0"; prev = null; op = null; fresh = true;
+  exprEl.textContent = ""; render();
+}
+
+const actions = { num, dot, op: setOp, eq: equals, percent, neg: negate, del, clear: () => reset(false) };
+document.getElementById("keys").addEventListener("click", e => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  actions[b.dataset.a](b.dataset.v);
+});
+
+document.addEventListener("keydown", e => {
+  const k = e.key;
+  if (/^[0-9]$/.test(k)) num(k);
+  else if (k === ".") dot();
+  else if ("+-*/".includes(k)) { e.preventDefault(); setOp(k); }
+  else if (k === "Enter" || k === "=") { e.preventDefault(); equals(); }
+  else if (k === "Backspace") del();
+  else if (k === "Escape") reset(false);
+  else if (k === "%") percent();
+});
+render();
+</script>
+</body>
+</html>
